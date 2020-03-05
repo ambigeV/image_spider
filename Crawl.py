@@ -1,3 +1,4 @@
+import random
 import requests
 import re
 import lxml
@@ -17,18 +18,71 @@ from pathlib import Path
 import os
 import numpy as np
 import pandas as pd
+import multiprocessing as mp
 
 # Set Headers
-headers = {'User-Agent':"Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.1 "
-                        "(KHTML, like Gecko) Chrome/22.0.1207.1 Safari/537.1",
-           'Referer':'http://www.mzitu.com/'}
+headers = {'User-Agent': "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.1 "
+                         "(KHTML, like Gecko) Chrome/22.0.1207.1 Safari/537.1",
+           'Referer': 'https://www.mzitu.com/'}
 # Set Root Path
 root_path = "D:\Lisayang\mzitu"
 # Set Url of Website
-url = 'http://www.mzitu.com'
+url = 'https://www.mzitu.com'
+# Retry
+requests.adapters.DEFAULT_RETRIES = 20
+
+def get_worker(url, header=headers):
+    """
+    To enable a flexible get action, derive a function to 
+    do that
+    :param url: url 
+    :param header: headers
+    :return: return a response
+    """
+    trytimes = 5
+    s = requests.session()
+    for i in range(trytimes):
+        if i == 4:
+            time.sleep(5)
+        try:
+            s.keep_alive = False
+            #ss = requests.get(
+            #    "http://api.xdaili.cn/xdaili-api//greatRecharge/getGreatIp?"
+            #    + "spiderId=2762edd6bf774c259c19282b80276ee2&"
+            #    + "orderno=YZ2020341824jBoEWe&returnType=1&count=20")
+            #proxy_list = ss.text.replace('\n', "").split('\r')[:-1]
+
+            proxy_list = [
+                'rn6sgthtk1' + ':' + 'tth6sozejq' + '@58.221.67.111:23128',
+                'f26xjbegaj' + ':' + '48u17zdemy' + '@47.92.132.197:23128',
+                'bw18zueu6p' + ':' + 'fnmht2zpt3' + '@47.104.79.229:23128',
+                'kldxbohr8i' + ':' + 'j17owluzst' + '@103.45.149.215:23128',
+                'gxzui9yss4' + ':' + 'stattee1vj' + '@139.224.228.184:23128',
+                'ljrdhcgfvn' + ':' + 'husspuqfjm' + '@115.159.115.30:23128',
+                'trv9ku0ehc' + ':' + '1whzchn8jb' + '@123.206.75.195:23128',
+                'hdm23dyvsq' + ':' + 'nezdn9mz5b' + '@123.207.170.170:23128'
+            ]
+            if(len(proxy_list)==8):
+                a = random.randint(0, 7)
+                b = (a + random.randint(1, 7)) % 8
+
+                s.proxies = {"http": "http://" + proxy_list[a],
+                             "https": "https://" + proxy_list[b],
+                        }
+            else:
+                pass
+
+            s.headers = header
+            r = s.get(url, proxies=s.proxies, headers=header, timeout=20)
+            #print(r.status_code)
+            if r.status_code == 200:
+                break;
+        except:
+            print('Request Has Failed')
+    return r
 
 
-def travel_topic(travel_url="http://www.mzitu.com/zhuanti"):
+def travel_topic(travel_url="https://www.mzitu.com/zhuanti"):
     """
     This function would traverse the topics of the mzitu.com
     and return a list of dictionaries as well as a .csv file.
@@ -39,7 +93,7 @@ def travel_topic(travel_url="http://www.mzitu.com/zhuanti"):
     the according tag.
     """
 
-    travel_res = requests.get(travel_url, headers=headers)
+    travel_res = get_worker(travel_url, header=headers)
     travel_xp = etree.HTML(travel_res.text)
     items = []
 
@@ -66,7 +120,7 @@ def travel_topic(travel_url="http://www.mzitu.com/zhuanti"):
     return items
 
 
-def crawl_image(current='196664', url="https://www.mzitu.com/"):
+def crawl_image(current='196664', url="https://www.mzitu.com/", speed=0.5):
     """
     This function would crawl all the images under an
     image album in mzitu.com.
@@ -74,6 +128,7 @@ def crawl_image(current='196664', url="https://www.mzitu.com/"):
     mzitu.com
     :param url: url is the url of the mzitu.com, this
     can be omitted if you apply it to a class.
+    :param speed: speed is to control the crawling speed
     :return: None
     """
     # Create Dir
@@ -87,7 +142,7 @@ def crawl_image(current='196664', url="https://www.mzitu.com/"):
 
     # Get Image URL
     current_url = url + current
-    image_res = requests.get(current_url, headers=headers)
+    image_res = get_worker(current_url, header=headers)
 
     # Resolve Image Resource
     image_soup = BeautifulSoup(image_res.text, 'lxml')
@@ -98,27 +153,31 @@ def crawl_image(current='196664', url="https://www.mzitu.com/"):
     for i in range(eval(number)):
         num = str(i + 1)
         image_url = current_url + '/' + num
-        image_res = requests.get(image_url, headers=headers)
+        image_res = get_worker(image_url, header=headers)
         image_tree = etree.HTML(image_res.text)
         src_url = image_tree.xpath('//div[@class="main-image"]//a/img/@src')[0]
-        src_res = requests.get(src_url, headers=headers)
+        src_res = get_worker(src_url, header=headers)
         # Download the JPG File
         final_image_path = image_path + num + '.png'
         with open(final_image_path, 'wb') as f:
             f.write(src_res.content)
-        time.sleep(0.7)
+        time.sleep(speed)
 
 
-def crawl_topic(name='wangyuchun', url='http://www.mzitu.com', root='D:\Lisayang\mzitu'):
+def crawl_topic(param={'name':'wangyuchun', 'speed':0.5}, url='https://www.mzitu.com', root='D:\Lisayang\mzitu'):
     """
     This function would crawl a topic of images based
     on the tag name which can be found in function ""
     travel topic"".
-    :param name: the tag name
+    :param param: the name and the speed
     :param url: url name
     :param root: root_path of you working environment
     :return: None
     """
+    # Decouple the parameters
+    name = param['name']
+    speed = param['speed']
+
     # Ready for Dir
     os.chdir(root)
     root_path = os.getcwd()
@@ -134,7 +193,7 @@ def crawl_topic(name='wangyuchun', url='http://www.mzitu.com', root='D:\Lisayang
 
     # Ready for Xpath
     new_url = url + '/tag/' + name + '/'
-    new_html = requests.get(new_url, headers=headers)
+    new_html = get_worker(new_url, header=headers)
     soup_html = BeautifulSoup(new_html.text, 'lxml')
     some = soup_html.find('div', class_='nav-links').get_text()
     if some == "":
@@ -149,7 +208,7 @@ def crawl_topic(name='wangyuchun', url='http://www.mzitu.com', root='D:\Lisayang
     for i in range(number):
         page = i + 1
         page_url = new_url + 'page/' + str(page)
-        page_html = requests.get(page_url, headers=headers)
+        page_html = get_worker(page_url, header=headers)
         sel_html = etree.HTML(page_html.text)
         # List ALL INDEXES
         for sel in sel_html.xpath('//*[@id="pins"]/li'):
@@ -159,12 +218,25 @@ def crawl_topic(name='wangyuchun', url='http://www.mzitu.com', root='D:\Lisayang
             image_index = href.split('/')[-1]
 
             # Crawl Images by Index
-            crawl_image(image_index)
+            crawl_image(image_index, speed=speed)
 
 
 if __name__ == '__main__':
+    """
     for item in travel_topic():
         print(item['link'])
         crawl_topic(item['link'], url, root_path)
+    """
+    #crawl_topic("xuweiwei_mia", speed=1)
+    topics = pd.read_csv(root_path + "\mzitu_index.csv", header=None)
+    pool = mp.Pool(processes=8)
+    #print(topics[0])
 
+    for i in topics[0]:
+        pool.apply_async(crawl_topic, ({'name': i, 'speed': 0.75},))
+        #crawl_topic(i, speed=0.3)
 
+    print("The main's mark")
+    pool.close()
+    pool.join()
+    print("All's done!")
